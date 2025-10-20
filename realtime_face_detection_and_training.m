@@ -1,76 +1,98 @@
+%% Real-Time Face Detection and Tracking
+clc; clear; close all;
 
-
-clear all
-
-% install the webcam package
+% Initialize webcam
 cam = webcam();
-% I m just Entering my Available Resolution
-% For Checkeing "cam.AvailableResolutions"
+disp('✅ Webcam initialized successfully');
 cam.Resolution = '640x480';
-%  Now, to read the frames one by one from the ‘cam’ object
-video.Frame = snapshot(cam);
-% initiate the video player object
-video_Player = vision.VideoPlayer('Position', [100 100 432 246]);
 
-% detect the face
-face_Detection = vision.CascadeObjectDetector();
+% Read first frame
+frame = snapshot(cam);
+
+% Initialize video player
+video_Player = vision.VideoPlayer('Position', [100 100 640 480]);
+
+% Create face detector and point tracker
+face_Detector = vision.CascadeObjectDetector();
 point_Tracker = vision.PointTracker('MaxBidirectionalError', 2);
 
+% Initialize variables
 run_loop = true;
-number_of_Points = 0;
+num_Points = 0;
 frame_Count = 0;
+max_Frames = 400;
 
-% while loop. It will keep looping as long as fg is true and frame_Count is less than 400 frames. If I want to run the webcam for longer, I can increase the number of frames. Then end this loop. Inside this loop, we are going to do the detection and tracking
-while run_loop && frame_Count <400
+disp('🎥 Starting real-time detection (Press X on video window to stop)');
 
-    
-    video_Frame = snapshot(cam);
-    %video_Reader = readFrame(video_Frame);
-    gray_Frame = rgb2gray(video_Frame);
-    frame_Count = frame_Count+1;
-    if number_of_Points < 10
-        face_Rectangle = face_Detection.step(gray_Frame);
-        
-        if ~isempty(face_Rectangle)
-            points = detectMinEigenFeatures(gray_Frame, 'ROI', face_Rectangle(1, :));
-            xy_Points = points.Location;
-            number_of_points = size(xy_Points, 1);
-            release(point_Tracker);
-            initialize(point_Tracker, xy_Points, gray_Frame);
-            
-            previous_Points = xy_Points;
-            
-            rectangle = bbox2points(face_Rectangle(1, :));
-            face_Polygon = reshape(rectangle', 1, []);
-            
-            video_Frame = insertShape(video_Frame, 'Polygon', face_Polygon, 'LineWidth', 3);
-            video_Frame = insertMarker(video_Frame, xy_Points, '+', 'Color', 'white');
+while run_loop && frame_Count < max_Frames
+    frame = snapshot(cam);
+    gray_Frame = rgb2gray(frame);
+    frame_Count = frame_Count + 1;
+
+    if num_Points < 10
+        % --- FACE DETECTION ---
+        bbox = step(face_Detector, gray_Frame);
+
+        if ~isempty(bbox)
+            % Use the first detected face
+            bbox = bbox(1, :);
+
+            % Detect strong corner points inside face
+            points = detectMinEigenFeatures(gray_Frame, 'ROI', bbox);
+
+            if points.Count >= 10
+                xy_Points = points.Location;
+                num_Points = size(xy_Points, 1);
+
+                % Initialize tracker with detected points
+                release(point_Tracker);
+                initialize(point_Tracker, xy_Points, gray_Frame);
+                previous_Points = xy_Points;
+
+                % Draw bounding box
+                rectanglePts = bbox2points(bbox);
+                face_Polygon = reshape(rectanglePts', 1, []);
+                frame = insertShape(frame, 'Polygon', face_Polygon, 'LineWidth', 3, 'Color', 'green');
+                frame = insertMarker(frame, xy_Points, '+', 'Color', 'white');
+            end
         end
-        
+
     else
-        [xy_points, isFound] = step(point_Tracker, gray_Frame);
-        new_Points = previous_Points(isFound, :);
-        number_of_points = size(new_Points, 1);
-        
-        if number_of_points >=10
-            
-            [xform, old_Points, new_Points] = estimateGeometricTransform(...
+        % --- TRACKING MODE ---
+        [xy_Points, isFound] = step(point_Tracker, gray_Frame);
+        new_Points = xy_Points(isFound, :);
+        old_Points = previous_Points(isFound, :);
+        num_Points = size(new_Points, 1);
+
+        if num_Points >= 10
+            % Estimate geometric transform
+            [xform, old_Points, new_Points] = estimateGeometricTransform2D(...
                 old_Points, new_Points, 'similarity', 'MaxDistance', 4);
-            rectangle = transformPointsForward(xform, rectangle);
-            face_Polygon = reshape(rectangle', 1, []);
-            video_Frame = insertShape(video_Frame, 'Polygon', face_Polygon, 'LineWidth', 3);
-            video_Frame = insertMarker(video_Frame, new_Points, '+', 'Color', 'white');
+
+            % Transform bounding box
+            rectanglePts = transformPointsForward(xform, rectanglePts);
+            face_Polygon = reshape(rectanglePts', 1, []);
+            frame = insertShape(frame, 'Polygon', face_Polygon, 'LineWidth', 3, 'Color', 'green');
+            frame = insertMarker(frame, new_Points, '+', 'Color', 'white');
+
+            % Update tracker
             previous_Points = new_Points;
-            %Point Tracker
             setPoints(point_Tracker, previous_Points);
+        else
+            % Lost track — reset
+            num_Points = 0;
+            release(point_Tracker);
         end
     end
-    step(video_Player, video_Frame);
+
+    % Display frame
+    step(video_Player, frame);
     run_loop = isOpen(video_Player);
 end
-% Closing
-clear cam;
 
+% Cleanup
+clear cam;
 release(video_Player);
 release(point_Tracker);
-release(face_Detection);
+release(face_Detector);
+disp('✅ Tracking ended and resources released.');
