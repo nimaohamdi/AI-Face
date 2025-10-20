@@ -1,110 +1,100 @@
-%% imread
-im=imread('1.jpg');
-imshow(im);
-%show the image using imshow function from plots tab
-
-%% using uigetfile
-[file,path]=uigetfile('*.*','Select image');
-loc=strcat(path,file);
-pic=imread(loc);
-imshow(pic);
-
-%% rgb2gray, bw, warning off
+%% Image Processing and Face Detection Demo
+clc; clear; close all;
 warning('off');
-imgray=rgb2gray(pic);
-figure,imshow(imgray);
-le=graythresh(pic);
-imbw=im2bw(pic,le);
-imshow(imbw);
 
-imbw2=imbinarize(imgray,le);
-% imshow(imbw);
-%% imwrite
-imwrite(imbw2,'bw.jpg','jpg');
+%% Load and Display Image
+[file, path] = uigetfile({'*.jpg;*.png;*.jpeg','Image Files'}, 'Select an image');
+if isequal(file,0)
+    disp('No file selected. Exiting...');
+    return;
+end
+imgPath = fullfile(path, file);
+img = imread(imgPath);
+figure, imshow(img), title('Original Image');
 
+%% Convert to Grayscale and Binary
+grayImg = rgb2gray(img);
+figure, imshow(grayImg), title('Grayscale Image');
 
-%% crop
-cpic=imcrop(pic,[100 100 400 400]);
-imshow(cpic);
+level = graythresh(grayImg);
+bwImg = imbinarize(grayImg, level);
+figure, imshow(bwImg), title('Binary Image');
 
-%% resize
-rpic=imresize(pic,0.1);
-rpic=imresize(pic,[500 500]);
-imshow(rpic);
-%% flip 
-fpic=flip(pic,1);
-imshow(pic);
-figure,imshow(fpic);
-%% rotate
-ropic=imrotate(pic,30,'crop');
-imshow(ropic);
+%% Save Binary Image
+imwrite(bwImg, 'binary_output.jpg');
+disp('Binary image saved as binary_output.jpg');
 
+%% Crop & Resize
+cropRect = [100 100 400 400];
+cropped = imcrop(img, cropRect);
+figure, imshow(cropped), title('Cropped Image');
 
-%% face detect
-[file,path]=uigetfile('*.*','Select image');
-loc=strcat(path,file);
-pic=imread(loc);
-pic2=rgb2gray(pic);
-%face
-ff=vision.CascadeObjectDetector();
-bbox=step(ff,pic2);
-dd=insertObjectAnnotation(pic,'Rectangle',bbox,'Face');
-pts=detectMinEigenFeatures(pic2,'ROI',bbox);
-dd = insertMarker(dd,pts,'+','color','green');
-imshow(dd);hold on
-plot(pts.Location(:,1),pts.Location(:,2));
-hold off
+resized = imresize(img, [500 500]);
+figure, imshow(resized), title('Resized Image (500x500)');
 
-%% mouth
-fm=vision.CascadeObjectDetector('Mouth');
-fm.MergeThreshold=110;
-bbox=step(fm,pic2);
-dd=insertObjectAnnotation(pic,'Rectangle',bbox,'Mouth');
-imshow(dd);
-%% Nose
-fn=vision.CascadeObjectDetector('Nose');
-bbox=step(fn,pic2);
-dd=insertObjectAnnotation(pic,'Rectangle',bbox,'Nose');
-imshow(dd);
+%% Flip & Rotate
+flipped = flip(img, 1);
+figure, imshow(flipped), title('Flipped Image');
 
-%% Eye pair
-fe=vision.CascadeObjectDetector('RightEye','MergeThreshold',40);
-bbox=step(fe,pic2);
-dd=insertObjectAnnotation(pic,'Rectangle',bbox,'Eye');
-imshow(dd);
+rotated = imrotate(img, 30, 'crop');
+figure, imshow(rotated), title('Rotated Image (30°)');
 
-%% Upper body
-fb=vision.CascadeObjectDetector('UpperBody','MergeThreshold',5);
-bbox=step(fb,pic2);
-dd=insertObjectAnnotation(pic,'Rectangle',bbox,'Body');
-imshow(dd);
+%% Face Detection
+gray = rgb2gray(img);
+faceDetector = vision.CascadeObjectDetector('FrontalFaceCART');
+bbox = step(faceDetector, gray);
+annotated = insertObjectAnnotation(img, 'rectangle', bbox, 'Face');
+figure, imshow(annotated), title('Face Detection');
 
-%% Webcam
-web=webcam('HD WebCam');
-%preview(web);
-% pause(2);
-% pp=snapshot(web);
-% imshow(pp);
-% pause(2);
-% clear('web');
+%% Facial Feature Detection
+features = {'Mouth', 'Nose', 'RightEye', 'UpperBody'};
+for i = 1:length(features)
+    detector = vision.CascadeObjectDetector(features{i});
+    if strcmp(features{i}, 'Mouth')
+        detector.MergeThreshold = 110;
+    elseif strcmp(features{i}, 'RightEye')
+        detector.MergeThreshold = 40;
+    elseif strcmp(features{i}, 'UpperBody')
+        detector.MergeThreshold = 5;
+    end
+    bbox = step(detector, gray);
+    annotated = insertObjectAnnotation(img, 'rectangle', bbox, features{i});
+    figure, imshow(annotated), title([features{i}, ' Detection']);
+end
+
+%% Webcam Initialization
+camList = webcamlist;
+if isempty(camList)
+    error('No webcam detected.');
+end
+web = webcam(camList{1});
+disp(['Using webcam: ', camList{1}]);
+
+% Uncomment to preview:
+% preview(web); pause(3); closePreview(web);
+
+%% Live View
+disp('Press Ctrl+C to stop live view.');
+figure;
 while true
-    pic=snapshot(web);
-    ff=imshow(pic);
+    frame = snapshot(web);
+    imshow(frame);
+    title('Live Camera Feed');
     pause(0.01);
 end
 
-%% Real-time face detection
-clc;close all;
-% clear('li');
-li=webcam();
-im=snapshot(li);
-dete=vision.CascadeObjectDetector('Mouth','MergeThreshold',100);
-pp=imshow(im);
+%% Real-time Face Detection (Press Ctrl+C to Stop)
+clc; close all;
+cam = webcam;
+faceDet = vision.CascadeObjectDetector('FrontalFaceCART');
+disp('Real-time face detection started...');
+figure;
 while true
-    im=snapshot(li);
-    im2=rgb2gray(im);
-    bb=step(dete,im2);
-    im2=insertObjectAnnotation(im,'rectangle',bb,'Face');
-    imshow(im2);
+    frame = snapshot(cam);
+    grayFrame = rgb2gray(frame);
+    bboxes = step(faceDet, grayFrame);
+    annotatedFrame = insertObjectAnnotation(frame, 'rectangle', bboxes, 'Face');
+    imshow(annotatedFrame);
+    title('Real-time Face Detection');
+    pause(0.01);
 end
-
