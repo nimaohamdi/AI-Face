@@ -30,3 +30,28 @@ The tracker automatically detects faces, tracks feature points, and handles move
 ```bash
 git clone https://github.com/yourusername/RealTimeFaceTracking.git
 cd RealTimeFaceTracking
+
+2. Open MATLAB and navigate to the project folder.
+3.Run the main script:
+FaceTracking.m
+A video window will open showing:
+
+Green polygon around the detected face
+
+White + markers on tracked feature points
+
+Press ESC or close the window to stop execution.
+
+## How It Works
+
+1.Connects to the webcam (webcam object)
+
+2.Detects the face using Haar Cascade
+
+3.Finds strong feature points within the face region
+
+4.Tracks the points using Lucas-Kanade optical flow (vision.PointTracker)
+
+5.Updates the face bounding polygon smoothly with estimateGeometricTransform2D
+
+6.If points are lost, the system re-detects the face automatically
